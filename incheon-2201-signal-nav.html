@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>인천 2201번 신호연동 내비게이션</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#07090c">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#07090c; --panel:#0e1319; --line:#1c232b;
+    --green:#2ee66b; --red:#ff3b3b; --yellow:#ffb020; --cyan:#3ad0ff;
+    --text:#eef2f6; --dim:#7b8794;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Segoe UI",Roboto,sans-serif;overflow:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+  header{display:flex;align-items:center;gap:8px;padding:10px 12px;flex-wrap:wrap;}
+  header .back{font-size:22px;opacity:.85;padding:2px 6px;}
+  header .title{font-weight:800;font-size:14px;}
+  .pill{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:5px 11px;font-size:11px;color:var(--dim);}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);}
+  .pill.on{color:var(--cyan);border-color:#134a5c;}
+  .btn{background:var(--panel);border:1px solid var(--line);color:var(--dim);border-radius:20px;
+    padding:5px 11px;font-size:11px;cursor:pointer;}
+  .btn.active{color:var(--green);border-color:#164a2a;}
+  .spacer{flex:1;}
+
+  main{flex:1;display:flex;min-height:0;padding:4px 10px 6px;gap:10px;}
+
+  #timeline{width:150px;position:relative;overflow-y:auto;flex-shrink:0;padding:4px 0 20px 8px;}
+  #timeline::-webkit-scrollbar{width:0;}
+  .rail{position:absolute;left:22px;top:0;bottom:0;width:2px;background:var(--line);}
+  .wp{position:relative;display:flex;align-items:center;gap:10px;padding:13px 0;min-height:30px;}
+  .wp .icon{position:relative;z-index:2;width:28px;height:28px;border-radius:8px;background:var(--panel);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;}
+  .wp .label{font-size:11.5px;color:var(--dim);line-height:1.25;}
+  .wp .label .tag{display:block;font-size:9px;color:var(--cyan);margin-top:1px;}
+  .wp.past{opacity:.35;}
+  .wp.current .label{color:var(--text);font-weight:700;}
+  .wp.current .icon{box-shadow:0 0 0 4px rgba(46,230,107,.18);}
+
+  .signal3{display:flex;flex-direction:column;gap:2px;background:#000;border:1px solid var(--line);
+    border-radius:6px;padding:3px;width:13px;}
+  .signal3 span{width:5px;height:5px;border-radius:50%;background:#2a2f36;margin:0 auto;}
+  .signal3 span.on-red{background:var(--red);box-shadow:0 0 6px var(--red);}
+  .signal3 span.on-yellow{background:var(--yellow);box-shadow:0 0 6px var(--yellow);}
+  .signal3 span.on-green{background:var(--green);box-shadow:0 0 6px var(--green);}
+
+  #center{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .next-card{padding:2px 4px 8px;}
+  .next-card .name{display:flex;align-items:center;gap:6px;font-size:17px;font-weight:800;flex-wrap:wrap;}
+  .next-card .badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:6px;background:var(--panel);
+    border:1px solid var(--line);color:var(--dim);}
+  .next-card .badge.real{color:var(--green);border-color:#164a2a;}
+  .next-card .stats{display:flex;align-items:baseline;gap:18px;margin-top:6px;}
+  .next-card .stats .dist{font-size:30px;font-weight:800;}
+  .next-card .stats .dist small{font-size:13px;color:var(--dim);font-weight:600;margin-left:2px;}
+  .next-card .stats .eta{font-size:38px;font-weight:800;}
+  .next-card .stats .eta small{font-size:14px;font-weight:700;margin-left:2px;}
+  .next-card .stats .eta.go{color:var(--green);}
+  .next-card .stats .eta.stop{color:var(--red);}
+  .hr{height:1px;background:var(--line);margin:6px 0 4px;}
+
+  #bottom{margin-top:auto;padding:8px 4px 2px;}
+  .speedrow{display:flex;align-items:flex-end;gap:14px;}
+  .speedrow .speed{font-size:46px;font-weight:800;line-height:1;}
+  .speedrow .unit{font-size:13px;color:var(--dim);margin-bottom:5px;}
+  .accel{margin-top:6px;}
+  .accel .val{font-size:13px;color:var(--cyan);font-weight:700;}
+  .accel .gauge{position:relative;height:3px;background:var(--line);border-radius:2px;margin-top:5px;}
+  .accel .gauge .mid{position:absolute;left:50%;top:-4px;width:1px;height:11px;background:var(--dim);}
+  .accel .gauge .bar{position:absolute;top:-3px;height:9px;width:3px;border-radius:2px;background:var(--cyan);}
+
+  #cyclewrap{width:112px;flex-shrink:0;display:flex;gap:8px;justify-content:center;align-items:stretch;
+    padding:2px 0 6px;}
+  .cyclebar{position:relative;flex:1;max-width:48px;border-radius:14px;overflow:hidden;
+    border:1px solid var(--line);background:#000;display:flex;flex-direction:column;}
+  .cyclebar.dim{opacity:.5;}
+  .cyclebar .seg.g{background:repeating-linear-gradient(0deg,var(--green) 0 2px,#22c25f 2px 4px);}
+  .cyclebar .seg.y{background:var(--yellow);}
+  .cyclebar .seg.r{background:repeating-linear-gradient(0deg,var(--red) 0 2px,#e13333 2px 4px);}
+  .cyclebar .now-line{position:absolute;left:-3px;right:-3px;height:3px;background:#fff;
+    box-shadow:0 0 6px #fff,0 0 2px #fff;}
+  .cyclebar .badge2{position:absolute;left:50%;transform:translateX(-50%);top:5px;
+    background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:10px;font-weight:800;
+    padding:2px 6px;border-radius:8px;}
+  .cyclebar .name{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:8.5px;color:var(--dim);}
+  .cyclebar .src{position:absolute;top:5px;right:5px;font-size:8px;color:var(--green);}
+
+  /* 실제 신호데이터 업로드 패널 */
+  #dataPanel{background:var(--panel);border-top:1px solid var(--line);padding:8px 14px 10px;font-size:11px;color:var(--dim);}
+  #dataPanel.hidden{display:none;}
+  #dataPanel .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  #dataPanel input[type=file]{font-size:10px;color:var(--dim);max-width:170px;}
+  #dataPanel .stat{color:var(--cyan);font-weight:700;}
+  #matchList{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:120px;overflow-y:auto;}
+  .matchrow{display:flex;align-items:center;gap:6px;}
+  .matchrow .lname{width:78px;flex-shrink:0;color:var(--text);font-size:10.5px;}
+  .matchrow input{flex:1;background:#000;border:1px solid var(--line);color:var(--text);border-radius:6px;
+    padding:4px 6px;font-size:10.5px;}
+  .matchrow .ok{color:var(--green);font-size:10px;width:16px;text-align:center;}
+
+  #simbar{display:flex;align-items:center;gap:8px;padding:6px 14px 10px;background:var(--panel);
+    border-top:1px solid var(--line);font-size:11px;color:var(--dim);}
+  #simbar input{flex:1;}
+  #simbar .simval{width:52px;text-align:right;color:var(--cyan);font-weight:700;}
+
+  #mapPanel{position:fixed;left:0;right:0;bottom:0;height:52vh;background:var(--panel);
+    border-top:1px solid var(--line);z-index:50;display:flex;flex-direction:column;}
+  #mapPanel.hidden{display:none;}
+  #mapPanel .maphead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
+    border-bottom:1px solid var(--line);font-size:12px;font-weight:700;}
+  #mapPanel .maphead .close{color:var(--dim);font-size:18px;padding:2px 8px;}
+  #leafletMap{flex:1;background:#0a0d11;}
+  .leaflet-tooltip{background:#000 !important;color:#fff !important;border:1px solid var(--line) !important;
+    font-size:10px !important;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="back">←</div>
+    <div class="title" id="routeTitle">인천 2201번</div>
+    <div class="pill" id="gpsPill"><span class="dot"></span><span id="gpsPillText">위치 대기중</span></div>
+    <div class="btn" id="dirToggle">차고지 → 신명스카이뷰</div>
+    <div class="spacer"></div>
+    <div class="btn" id="mapToggle">지도</div>
+    <div class="btn" id="dataToggle">실제 신호데이터</div>
+    <div class="btn" id="gpsToggle">GPS 사용</div>
+  </header>
+
+  <main>
+    <div id="timeline"><div class="rail"></div></div>
+
+    <div id="center">
+      <div class="next-card">
+        <div class="name"><span>↑</span><span id="nextName">-</span><span class="badge" id="nextBadge">추정치</span></div>
+        <div class="stats">
+          <div class="dist"><span id="nextDist">-</span><small>m</small></div>
+          <div class="eta" id="nextEtaWrap"><span id="nextEta">-</span><small id="nextEtaUnit">초</small></div>
+        </div>
+      </div>
+      <div class="hr"></div>
+
+      <div id="bottom">
+        <div class="speedrow">
+          <div class="speed" id="speedVal">0</div>
+          <div class="unit">km/h</div>
+        </div>
+        <div class="accel">
+          <div class="val" id="accelVal">+0.0 m/s²</div>
+          <div class="gauge"><div class="mid"></div><div class="bar" id="accelBar" style="left:50%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cyclewrap"></div>
+  </main>
+
+  <div id="dataPanel" class="hidden">
+    <div class="row">
+      <span>공공데이터포털: <b style="color:#fff">경찰청 인천광역시경찰청_인천시교통신호등신호주기</b> CSV 업로드</span>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <span id="csvStatus">파일 없음</span>
+    </div>
+
+    <div class="row" style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);">
+      <span style="color:#fff;font-weight:700;">또는 오픈API로 직접 조회</span>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <input type="text" id="apiKey" value="2dfd650f1f9a82a43f3583be7dc2f3b7a04b696852972c28f9b444e7573000ba" placeholder="공공데이터포털 서비스키(인증키)" style="flex:1;min-width:180px;background:#000;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 8px;font-size:10.5px;">
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <input type="text" id="apiEndpoint" value="https://api.odcloud.kr/api/15095520/v1/uddi:1b5703be-2733-462d-a8b0-bf2911d30aa2" placeholder="요청 URL (예: https://api.odcloud.kr/api/15095520/v1/uddi:xxxx)" style="flex:1;min-width:180px;background:#000;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 8px;font-size:10.5px;">
+      <button class="btn" id="apiFetchBtn" style="border:none;">조회</button>
+    </div>
+    <div id="apiStatus" style="margin-top:4px;font-size:10.5px;"></div>
+
+    <div id="matchList"></div>
+    <div style="margin-top:6px;font-size:10px;opacity:.75;">
+      요청 URL·서비스키 칸에는 실제 확인한 값이 이미 채워져 있어요(2024년 12월 기준 최신 데이터,
+      uddi:1b5703be...). "조회" 버튼만 누르면 바로 시도돼요. 브라우저에서 CORS로 막히면 위
+      CSV 다운로드 방식을 대신 쓰시면 됩니다. 노선상 신호교차로 이름과 실제 교차로명이 다를 수 있어
+      위에서 직접 매칭해 주세요.
+    </div>
+
+    <div class="row" style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line);">
+      <span style="color:#fff;font-weight:700;">정류장 실좌표(GPS 위치 매칭용) — 국토교통부_전국 버스정류장 위치정보</span>
+    </div>
+    <div class="row" style="margin-top:6px;">
+      <input type="text" id="stopApiEndpoint" value="https://api.odcloud.kr/api/15067528/v1/uddi:f74b9799-9db1-4754-a5d0-b66e2ae705f3" style="flex:1;min-width:180px;background:#000;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:5px 8px;font-size:10.5px;">
+      <button class="btn" id="stopFetchBtn" style="border:none;">조회</button>
+    </div>
+    <div id="stopApiStatus" style="margin-top:4px;font-size:10.5px;"></div>
+    <div id="stopMatchList"></div>
+    <div style="margin-top:6px;font-size:10px;opacity:.75;">
+      전국 버스정류장 표준 데이터(정류장명+위도/경도)에서 2201번 노선 정류장을 자동으로 이름 매칭해요.
+      자동매칭 안 된 지점만 아래에 남으니 직접 검색해서 골라주세요. 좌표가 채워지면 GPS 켰을 때
+      시뮬레이션 대신 실제 내 위치와 거리로 다음 지점까지 남은 거리를 계산해요.
+    </div>
+  </div>
+
+  <div id="simbar">
+    <span>시뮬레이션 속도</span>
+    <input type="range" id="simSpeed" min="0" max="60" value="22">
+    <span class="simval" id="simSpeedVal">22 km/h</span>
+  </div>
+
+  <div id="mapPanel" class="hidden">
+    <div class="maphead">
+      <span>2201번 노선 지도 (실좌표 매칭된 지점만 표시)</span>
+      <span class="close" id="mapClose">✕</span>
+    </div>
+    <div id="leafletMap"></div>
+  </div>
+</div>
+
+<script>
+/* ===================== 인천 2201번 노선 데이터 (영종버스공영차고지 → 신명스카이뷰 방향) =====================
+   실제 노선: 영종운수 2201번 지선버스, 영종버스공영차고지 ↔ 신명스카이뷰, 왕복 26.3km (2025.11.1 연장 기준)
+   정류장 순서/명칭은 나무위키 기준 실제 경유지이며, 정류장 간 거리는 데모용 근사치입니다.
+   type: 'stop'(일반 정류장) | 'light'(교차로/신호등 추정 지점 — 실제 교차로 여부는 미확인, 데모용 추정)
+*/
+let ROUTE_FORWARD = [
+  { type:'stop',  name:'영종버스공영차고지(기점)', gap:0 },
+  { type:'stop',  name:'오션포레베네스트하우스',   gap:900 },
+  { type:'stop',  name:'영종역',                 gap:1400 },
+  { type:'light', name:'영종KCC스위첸옆문',       gap:900, cycleDefault:{green:38,yellow:3,red:44} },
+  { type:'stop',  name:'한신더휴2차',            gap:600 },
+  { type:'stop',  name:'영종2동행정복지센터',     gap:700 },
+  { type:'stop',  name:'호반써밋스카이센트럴1차', gap:500 },
+  { type:'stop',  name:'영종하늘도서관',          gap:900 },
+  { type:'light', name:'한라비발디후문',          gap:700, cycleDefault:{green:36,yellow:3,red:42} },
+  { type:'stop',  name:'스카이시티자이',          gap:600 },
+  { type:'stop',  name:'동보노빌리티',            gap:700 },
+  { type:'stop',  name:'동원로얄듀크마리나포레',   gap:900 },
+  { type:'stop',  name:'신명스카이뷰(종점)',      gap:1200 },
+];
+
+let direction = 1; // 1: 차고지→신명스카이뷰, -1: 신명스카이뷰→차고지
+// 역방향 gap 재계산: 정방향 gap[k]는 (k-1 -> k) 거리이므로, 역방향에서는 순서가 뒤집히고
+// 새 배열의 i번째 gap은 정방향의 (len-i)번째 gap과 같다.
+function buildReverse(){
+  const n = ROUTE_FORWARD.length;
+  const rev = [];
+  for (let i=0;i<n;i++){
+    const src = ROUTE_FORWARD[n-1-i];
+    const gap = i===0 ? 0 : ROUTE_FORWARD[n-i].gap;
+    rev.push({ type:src.type, name:src.name, gap, cycleDefault: src.cycleDefault, lat:src.lat, lng:src.lng });
+  }
+  return rev;
+}
+
+let waypoints = ROUTE_FORWARD;
+let realSignalData = {}; // { 교차로명(사용자매칭입력) : {red, cycleTotal, cyOffice:'실제'} }
+
+/* ===================== 상태 ===================== */
+let curIndex = 0;
+let remainDist = 1;
+let speedKmh = 22;
+let prevSpeedMs = 0;
+let gpsActive = false;
+let lastTickMs = performance.now();
+
+function resetRoute(){
+  waypoints = direction===1 ? ROUTE_FORWARD : buildReverse();
+  curIndex = 0;
+  remainDist = waypoints[1] ? waypoints[1].gap : 1;
+  renderTimeline();
+  renderMatchList();
+  renderStopMatchList();
+}
+function refreshWaypointsKeepState(){
+  waypoints = direction===1 ? ROUTE_FORWARD : buildReverse();
+  renderTimeline();
+  if (typeof renderMapRoute === 'function') renderMapRoute();
+}
+
+/* ===================== 신호 위상 계산 =====================
+   실제 매칭된 데이터가 있으면 그 값(green/yellow/red)을, 없으면 노선 기본 추정치를 사용.
+   offset은 공개데이터에 초 단위로 없어 0으로 둠(연동 오프셋은 '오프' 컬럼이 O/F 방식만 표기).
+*/
+function getCycleFor(wp){
+  const real = realSignalData[wp.name];
+  if (real) {
+    const cy = cycleForHour(real.row); // 아침/낮/저녁 시간대가 바뀌면 자동으로 다른 주기값 반영
+    return { green:cy.green, yellow:3, red:cy.red, offset:0, isReal:true };
+  }
+  const d = wp.cycleDefault || {green:35,yellow:3,red:40};
+  return { ...d, offset:0, isReal:false };
+}
+/* cycleDef: {green,yellow,red,offset}, calib(선택): {refEpochSec, refPhase} — 사용자가
+   실제 신호를 보고 "지금 방금 초록/빨강으로 바뀌었다"를 눌러 기록한 기준시점.
+   calib이 있으면 그 기준시점부터 정확히 순서대로 위상을 계산하고,
+   없으면 offset(기본 0, 즉 임의 기준) 기반의 추정치를 사용한다.
+*/
+function cyclePhase(cycleDef, nowSec, calib){
+  const total = cycleDef.green + cycleDef.yellow + cycleDef.red;
+  let t;
+  if (calib){
+    const base = calib.refPhase==='green' ? 0
+               : calib.refPhase==='yellow' ? cycleDef.green
+               : cycleDef.green + cycleDef.yellow;
+    t = ((base + (nowSec - calib.refEpochSec)) % total + total) % total;
+  } else {
+    t = ((nowSec + cycleDef.offset) % total + total) % total;
+  }
+  if (t < cycleDef.green) return { phase:'green', left: cycleDef.green - t, t, total };
+  t -= cycleDef.green;
+  if (t < cycleDef.yellow) return { phase:'yellow', left: cycleDef.yellow - t, t: t+cycleDef.green, total };
+  t -= cycleDef.yellow;
+  return { phase:'red', left: cycleDef.red - t, t: t+cycleDef.green+cycleDef.yellow, total };
+}
+let calibrations = {}; // { [wp.name]: {refEpochSec, refPhase} } — 세션 내에서만 유지
+function phaseFor(wp, nowSec){
+  return cyclePhase(getCycleFor(wp), nowSec, calibrations[wp.name]);
+}
+function isCalibrated(wp){ return !!calibrations[wp.name]; }
+function calibrateNow(wp, phase){
+  calibrations[wp.name] = { refEpochSec: Date.now()/1000, refPhase: phase };
+  renderTimeline(); renderCenter(); renderCycles();
+}
+
+/* ===================== 렌더: 좌측 타임라인 ===================== */
+const timelineEl = document.getElementById('timeline');
+function renderTimeline(){
+  timelineEl.querySelectorAll('.wp').forEach(n=>n.remove());
+  const nowSec = Date.now()/1000;
+  waypoints.forEach((wp,i)=>{
+    const div = document.createElement('div');
+    div.className = 'wp' + (i < curIndex ? ' past' : '') + (i === curIndex ? ' current' : '');
+    let iconHtml = '';
+    let tag = '';
+    if (wp.type === 'light'){
+      const cy = getCycleFor(wp);
+      const ph = phaseFor(wp, nowSec);
+      iconHtml = `<div class="icon"><div class="signal3">
+        <span class="${ph.phase==='red'?'on-red':''}"></span>
+        <span class="${ph.phase==='yellow'?'on-yellow':''}"></span>
+        <span class="${ph.phase==='green'?'on-green':''}"></span>
+      </div></div>`;
+      tag = isCalibrated(wp) ? '보정됨' : (cy.isReal ? '실데이터(미보정)' : '');
+    } else {
+      iconHtml = `<div class="icon">🚏</div>`;
+    }
+    div.innerHTML = `${iconHtml}<div class="label">↑ ${wp.name}${tag?`<span class="tag">${tag}</span>`:''}</div>`;
+    div.dataset.idx = i;
+    timelineEl.appendChild(div);
+  });
+  const cur = timelineEl.querySelector('.wp.current');
+  if (cur) cur.scrollIntoView({block:'center', behavior:'smooth'});
+}
+function updateTimelineIcons(){
+  const nowSec = Date.now()/1000;
+  timelineEl.querySelectorAll('.wp').forEach(el=>{
+    const i = +el.dataset.idx;
+    const wp = waypoints[i];
+    if (wp.type !== 'light') return;
+    const ph = phaseFor(wp, nowSec);
+    const dots = el.querySelectorAll('.signal3 span');
+    if (!dots.length) return;
+    dots.forEach(d=>d.className='');
+    if (ph.phase==='red') dots[0].className='on-red';
+    else if (ph.phase==='yellow') dots[1].className='on-yellow';
+    else dots[2].className='on-green';
+  });
+}
+
+/* ===================== 렌더: 중앙 카드 ===================== */
+function nextLightIndexFrom(i){
+  for (let k=i; k<waypoints.length; k++) if (waypoints[k].type==='light') return k;
+  return -1;
+}
+function renderCenter(){
+  document.getElementById('nextName').textContent = waypoints[curIndex].name;
+  document.getElementById('nextDist').textContent = Math.max(0, Math.round(remainDist));
+
+  const idx = waypoints[curIndex].type==='light' ? curIndex : nextLightIndexFrom(curIndex);
+  const badge = document.getElementById('nextBadge');
+  const etaEl = document.getElementById('nextEta');
+  const etaWrap = document.getElementById('nextEtaWrap');
+  const speedMs = speedKmh/3.6;
+  const arriveSec = speedMs>0 ? remainDist/speedMs : Infinity;
+  etaEl.textContent = isFinite(arriveSec) ? Math.round(arriveSec) : '-';
+
+  if (idx === curIndex && waypoints[idx] && waypoints[idx].type==='light'){
+    const wpLight = waypoints[idx];
+    const cy = getCycleFor(wpLight);
+    const nowSec = Date.now()/1000;
+    const ph = cyclePhase(cy, nowSec + (isFinite(arriveSec)?arriveSec:0), calibrations[wpLight.name]);
+    etaWrap.className = 'eta ' + (ph.phase==='red' ? 'stop' : 'go');
+    const calBadge = isCalibrated(wpLight) ? '보정됨' : (cy.isReal?'실데이터·미보정':'추정치');
+    badge.textContent = calBadge;
+    badge.className = 'badge' + (isCalibrated(wpLight) ? ' real' : '');
+    renderCalibrateButtons(wpLight);
+  } else {
+    etaWrap.className = 'eta go';
+    badge.textContent = '정류장';
+    badge.className = 'badge';
+    renderCalibrateButtons(null);
+  }
+}
+function renderCalibrateButtons(wp){
+  let box = document.getElementById('calibBox');
+  if (!box){
+    box = document.createElement('div');
+    box.id = 'calibBox';
+    box.style.cssText = 'display:flex;gap:6px;margin-top:6px;';
+    document.querySelector('.next-card').appendChild(box);
+  }
+  if (!wp){ box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <button class="btn" id="calGreenBtn" style="border:none;color:var(--green);">지금 초록으로 바뀜</button>
+    <button class="btn" id="calRedBtn" style="border:none;color:var(--red);">지금 빨강으로 바뀜</button>`;
+  document.getElementById('calGreenBtn').onclick = ()=>calibrateNow(wp,'green');
+  document.getElementById('calRedBtn').onclick = ()=>calibrateNow(wp,'red');
+}
+
+/* ===================== 렌더: 우측 신호주기 바 그래프 ===================== */
+const cycleWrap = document.getElementById('cyclewrap');
+function buildBar(wp){
+  const cy = getCycleFor(wp);
+  const ph = phaseFor(wp, Date.now()/1000);
+  const gPct = cy.green/ph.total*100, yPct = cy.yellow/ph.total*100, rPct = cy.red/ph.total*100;
+  const nowPct = ph.t/ph.total*100;
+  const bar = document.createElement('div');
+  bar.className = 'cyclebar';
+  bar.innerHTML = `
+    <div class="seg r" style="height:${rPct}%"></div>
+    <div class="seg y" style="height:${yPct}%"></div>
+    <div class="seg g" style="height:${gPct}%"></div>
+    <div class="now-line" style="bottom:${100-nowPct}%"></div>
+    <div class="badge2" style="color:${ph.phase==='green'?'#2ee66b':ph.phase==='red'?'#ff3b3b':'#ffb020'}">${Math.ceil(ph.left)}</div>
+    ${isCalibrated(wp)?'<div class="src" style="color:#2ee66b;">●보정</div>':cy.isReal?'<div class="src" style="color:var(--dim);">●실(미보정)</div>':''}
+    <div class="name">${wp.name.length>5?wp.name.slice(0,5):wp.name}</div>`;
+  return bar;
+}
+function renderCycles(){
+  cycleWrap.innerHTML = '';
+  const lights = waypoints.filter(w=>w.type==='light');
+  const idx = waypoints[curIndex] && waypoints[curIndex].type==='light' ? curIndex : nextLightIndexFrom(curIndex);
+  const target = waypoints[idx];
+  if (!target) return;
+  const pos = lights.findIndex(l=>l===target);
+  if (pos > 0) { const b = buildBar(lights[pos-1]); b.classList.add('dim'); cycleWrap.appendChild(b); }
+  cycleWrap.appendChild(buildBar(target));
+}
+
+/* ===================== 이동/틱 ===================== */
+function tick(){
+  const now = performance.now();
+  const dt = Math.min(1, (now - lastTickMs)/1000);
+  lastTickMs = now;
+  const speedMs = speedKmh/3.6;
+
+  if (!useRealPosition){
+    remainDist -= speedMs*dt;
+    if (remainDist <= 0 && curIndex < waypoints.length-1){
+      curIndex += 1;
+      remainDist += (waypoints[curIndex+1] ? waypoints[curIndex+1].gap : waypoints[curIndex].gap) || 1;
+      renderTimeline();
+      renderMapRoute();
+    }
+  }
+  // useRealPosition===true일 때는 curIndex/remainDist가 GPS 콜백(snapToRoute)에서 갱신됨
+
+  const accel = (speedMs - prevSpeedMs)/Math.max(dt,0.001);
+  prevSpeedMs = speedMs;
+  document.getElementById('accelVal').textContent = (accel>=0?'+':'') + accel.toFixed(1) + ' m/s²';
+  document.getElementById('accelBar').style.left = (Math.max(-1,Math.min(1,accel/3))*50+50) + '%';
+  document.getElementById('speedVal').textContent = Math.round(speedKmh);
+
+  renderCenter();
+  renderCycles();
+  updateTimelineIcons();
+}
+
+/* ===================== 방향 전환 ===================== */
+document.getElementById('dirToggle').addEventListener('click', ()=>{
+  direction *= -1;
+  document.getElementById('dirToggle').textContent = direction===1 ? '차고지 → 신명스카이뷰' : '신명스카이뷰 → 차고지';
+  resetRoute();
+});
+
+/* ===================== GPS ===================== */
+let useRealPosition = false; // 정류장 실좌표가 충분히 매칭되면 true로 전환
+function haversineM(lat1,lng1,lat2,lng2){
+  const R = 6371000;
+  const toRad = d=>d*Math.PI/180;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+function coordWaypointCount(){
+  return waypoints.filter(w=>typeof w.lat==='number' && typeof w.lng==='number').length;
+}
+/* 위경도를 기준위도 근처의 평면 좌표(m)로 변환하는 간이 등장방형 투영 - 짧은 구간 거리/투영 계산용 */
+function toLocalXY(lat,lng,refLat){
+  const R = 6371000;
+  const x = (lng*Math.PI/180) * R * Math.cos(refLat*Math.PI/180);
+  const y = (lat*Math.PI/180) * R;
+  return {x,y};
+}
+/* 실좌표가 매칭된 지점들을 순서대로 이은 폴리라인에 현재 GPS 위치를 투영(스냅)해서
+   - 어느 구간(세그먼트) 위에 있는지
+   - 그 구간의 도착지점(다음 실좌표 지점)까지 남은 거리
+   - 경로에서 벗어난 정도(수직거리)
+   를 계산합니다. 실제 도로 곡선을 따라가진 않지만(직선 구간 연결), 단순 최근접점 매칭보다
+   진행 방향을 훨씬 안정적으로 추정합니다.
+*/
+function snapToRoute(lat,lng){
+  const coordIdxs = waypoints.map((w,i)=>i).filter(i=>typeof waypoints[i].lat==='number');
+  if (coordIdxs.length < 2) { useRealPosition = false; return null; }
+  useRealPosition = true;
+  let best = null;
+  for (let k=0;k<coordIdxs.length-1;k++){
+    const iA = coordIdxs[k], iB = coordIdxs[k+1];
+    const A = waypoints[iA], B = waypoints[iB];
+    const refLat = (A.lat+B.lat)/2;
+    const P = toLocalXY(lat,lng,refLat), a = toLocalXY(A.lat,A.lng,refLat), b = toLocalXY(B.lat,B.lng,refLat);
+    const abx = b.x-a.x, aby = b.y-a.y;
+    const abLen2 = abx*abx + aby*aby || 1e-6;
+    let t = ((P.x-a.x)*abx + (P.y-a.y)*aby) / abLen2;
+    t = Math.max(0, Math.min(1, t));
+    const projX = a.x + abx*t, projY = a.y + aby*t;
+    const dPerp = Math.hypot(P.x-projX, P.y-projY);
+    const remain = Math.hypot(b.x-projX, b.y-projY);
+    if (!best || dPerp < best.dPerp) best = { iA, iB, dPerp, remain };
+  }
+  if (!best) return null;
+  if (best.iB !== curIndex){ curIndex = best.iB; renderTimeline(); renderMapRoute(); }
+  remainDist = best.remain;
+  gpsPillText.textContent = `실좌표 추적중 (경로이탈 ${Math.round(best.dPerp)}m)`;
+  return best;
+}
+
+const gpsToggle = document.getElementById('gpsToggle');
+const gpsPill = document.getElementById('gpsPill');
+const gpsPillText = document.getElementById('gpsPillText');
+const simbar = document.getElementById('simbar');
+let watchId = null;
+gpsToggle.addEventListener('click', ()=>{
+  if (gpsActive){
+    if (watchId!==null) navigator.geolocation.clearWatch(watchId);
+    gpsActive = false; useRealPosition = false;
+    gpsToggle.textContent = 'GPS 사용'; gpsToggle.classList.remove('active');
+    gpsPill.classList.remove('on'); gpsPillText.textContent = '위치 대기중';
+    simbar.style.display = 'flex';
+    return;
+  }
+  if (!navigator.geolocation){ alert('이 브라우저는 GPS를 지원하지 않습니다.'); return; }
+  watchId = navigator.geolocation.watchPosition(pos=>{
+    gpsActive = true;
+    gpsToggle.textContent = 'GPS 끄기'; gpsToggle.classList.add('active');
+    gpsPill.classList.add('on');
+    simbar.style.display = 'none';
+    if (typeof pos.coords.speed === 'number' && pos.coords.speed !== null && pos.coords.speed >= 0){
+      speedKmh = pos.coords.speed * 3.6;
+      document.getElementById('simSpeed').value = Math.round(speedKmh);
+    }
+    if (coordWaypointCount() >= 2){
+      snapToRoute(pos.coords.latitude, pos.coords.longitude);
+    } else {
+      useRealPosition = false;
+      gpsPillText.textContent = '실시간 위치 연동중 (정류장 좌표 매칭 전: 속도만 반영)';
+    }
+    updateMapPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+  }, err=>{ gpsPillText.textContent = 'GPS 오류: ' + err.message; },
+  { enableHighAccuracy:true, maximumAge:1000, timeout:8000 });
+});
+const simSpeed = document.getElementById('simSpeed');
+const simSpeedVal = document.getElementById('simSpeedVal');
+simSpeed.addEventListener('input', ()=>{
+  if (!gpsActive) speedKmh = +simSpeed.value;
+  simSpeedVal.textContent = simSpeed.value + ' km/h';
+});
+
+/* ===================== 실제 신호데이터 CSV 업로드 ===================== */
+const dataToggle = document.getElementById('dataToggle');
+const dataPanel = document.getElementById('dataPanel');
+dataToggle.addEventListener('click', ()=>{
+  dataPanel.classList.toggle('hidden');
+  dataToggle.classList.toggle('active');
+});
+
+let csvRows = []; // [{교차로명, 레드신호, 최소, 최대, 아침, 낮, 저녁}, ...]
+const csvStatus = document.getElementById('csvStatus');
+
+function decodeBuffer(buf){
+  // 정부 CSV는 EUC-KR인 경우가 많음. UTF-8로 먼저 시도해 깨짐이 심하면 EUC-KR로 재시도.
+  let utf8 = new TextDecoder('utf-8').decode(buf);
+  const brokenCount = (utf8.match(/\uFFFD/g)||[]).length;
+  if (brokenCount > 3){
+    try { return new TextDecoder('euc-kr').decode(buf); } catch(e){ return utf8; }
+  }
+  return utf8;
+}
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+  if (!lines.length) return [];
+  const header = lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
+  const idx = {};
+  header.forEach((h,i)=>idx[h]=i);
+  const rows = [];
+  for (let i=1;i<lines.length;i++){
+    const cols = lines[i].split(',').map(c=>c.replace(/^"|"$/g,'').trim());
+    if (!cols.length) continue;
+    rows.push({
+      name: cols[idx['교차로명']] || '',
+      red: numOf(cols[idx['레드신호']]),
+      min: numOf(cols[idx['최소']]),
+      max: numOf(cols[idx['최대']]),
+      am: numOf(cols[idx['아침']]),
+      day: numOf(cols[idx['낮']]),
+      pm: numOf(cols[idx['저녁']]),
+    });
+  }
+  return rows.filter(r=>r.name);
+}
+function numOf(v){
+  if (!v) return null;
+  const n = parseInt(String(v).replace(/[^0-9]/g,''),10);
+  return isNaN(n) ? null : n;
+}
+function cycleForHour(row){
+  const h = new Date().getHours();
+  let total = (h>=6&&h<10) ? row.am : (h>=10&&h<17) ? row.day : (h>=17&&h<21) ? row.pm : row.min;
+  if (!total) total = row.day || row.pm || row.am || row.max || row.min || 90;
+  let red = row.red;
+  if (!red || red>=total) red = Math.round(total*0.45);
+  const yellow = 3;
+  const green = Math.max(5, total - red - yellow);
+  return { green, red };
+}
+
+document.getElementById('csvFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if (!file) return;
+  csvStatus.textContent = '읽는 중...';
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    const text = decodeBuffer(reader.result);
+    csvRows = parseCSV(text);
+    csvStatus.textContent = `${csvRows.length.toLocaleString()}건 로드됨 — 아래에서 교차로 매칭`;
+    renderMatchList();
+  };
+  reader.onerror = ()=>{ csvStatus.textContent = '파일을 읽지 못했습니다.'; };
+  reader.readAsArrayBuffer(file);
+});
+
+/* ===================== 오픈API(odcloud) 직접 조회 =====================
+   data.go.kr에서 파일데이터를 자동변환한 오픈API는 보통
+   https://api.odcloud.kr/api/{데이터셋ID}/v1/uddi:xxxxxxxx 형태의 요청URL을 사용합니다.
+   서비스키는 "활용신청" 승인 후 마이페이지에서 발급되는 값이며, 이 페이지는 그 값을
+   파일에 저장하지 않고 지금 이 브라우저 세션에서 fetch 호출에만 사용합니다.
+*/
+const apiStatusEl = document.getElementById('apiStatus');
+document.getElementById('apiFetchBtn').addEventListener('click', async ()=>{
+  const key = document.getElementById('apiKey').value.trim();
+  const endpoint = document.getElementById('apiEndpoint').value.trim();
+  if (!key || !endpoint){
+    apiStatusEl.textContent = '서비스키와 요청 URL을 모두 입력해 주세요.';
+    apiStatusEl.style.color = 'var(--red)';
+    return;
+  }
+  apiStatusEl.textContent = '조회 중...';
+  apiStatusEl.style.color = 'var(--dim)';
+  try{
+    const perPage = 5000;
+    const url = `${endpoint}${endpoint.includes('?')?'&':'?'}page=1&perPage=${perPage}&serviceKey=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const list = json.data || json.items || [];
+    if (!Array.isArray(list) || !list.length) throw new Error('응답에 데이터가 없습니다. 요청 URL을 확인해 주세요.');
+    csvRows = list.map(r=>({
+      name: r['교차로명'] || r['교차로'] || '',
+      red: numOf(r['레드신호']),
+      min: numOf(r['최소']),
+      max: numOf(r['최대']),
+      am: numOf(r['아침']),
+      day: numOf(r['낮']),
+      pm: numOf(r['저녁']),
+    })).filter(r=>r.name);
+    apiStatusEl.textContent = `API로 ${csvRows.length.toLocaleString()}건 불러옴 — 아래에서 교차로 매칭`;
+    apiStatusEl.style.color = 'var(--green)';
+    renderMatchList();
+  } catch(err){
+    apiStatusEl.textContent = '조회 실패: ' + err.message + ' (CORS 차단이면 프록시 서버가 필요할 수 있어요)';
+    apiStatusEl.style.color = 'var(--red)';
+  }
+});
+
+const matchListEl = document.getElementById('matchList');
+function renderMatchList(){
+  matchListEl.innerHTML = '';
+  const lights = waypoints.filter(w=>w.type==='light');
+  lights.forEach(wp=>{
+    const row = document.createElement('div');
+    row.className = 'matchrow';
+    const listId = 'dl_' + wp.name.replace(/[^a-zA-Z0-9가-힣]/g,'');
+    row.innerHTML = `
+      <div class="lname">${wp.name}</div>
+      <input list="${listId}" placeholder="실제 교차로명 검색·입력" value="${realSignalData[wp.name]?realSignalData[wp.name].matchedName:''}">
+      <datalist id="${listId}"></datalist>
+      <div class="ok">${realSignalData[wp.name]?'✓':''}</div>`;
+    const input = row.querySelector('input');
+    const dl = row.querySelector('datalist');
+    input.addEventListener('input', ()=>{
+      const q = input.value.trim();
+      dl.innerHTML = '';
+      if (q.length < 1 || !csvRows.length) return;
+      const matches = csvRows.filter(r=>r.name.includes(q)).slice(0,50);
+      matches.forEach(m=>{
+        const opt = document.createElement('option');
+        opt.value = m.name;
+        dl.appendChild(opt);
+      });
+    });
+    input.addEventListener('change', ()=>{
+      const found = csvRows.find(r=>r.name === input.value.trim());
+      if (found){
+        realSignalData[wp.name] = { row:found, matchedName:found.name };
+      } else {
+        delete realSignalData[wp.name];
+      }
+      row.querySelector('.ok').textContent = found ? '✓' : '';
+      renderTimeline(); renderCenter(); renderCycles();
+    });
+    matchListEl.appendChild(row);
+  });
+}
+
+const stopApiStatusEl = document.getElementById('stopApiStatus');
+function cleanStopQuery(name){
+  return name.replace(/\(.+?\)/g,'').trim();
+}
+async function fetchStopCandidates(query, key, endpoint){
+  const url = `${endpoint}${endpoint.includes('?')?'&':'?'}page=1&perPage=5&serviceKey=${encodeURIComponent(key)}&cond[정류장명::LIKE]=${encodeURIComponent(query)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  return (json.data||[]).map(r=>({
+    name: r['정류장명'],
+    lat: parseFloat(r['위도']),
+    lng: parseFloat(r['경도']),
+  })).filter(r=>r.name && !isNaN(r.lat) && !isNaN(r.lng));
+}
+document.getElementById('stopFetchBtn').addEventListener('click', async ()=>{
+  const key = document.getElementById('apiKey').value.trim();
+  const endpoint = document.getElementById('stopApiEndpoint').value.trim();
+  if (!key || !endpoint){
+    stopApiStatusEl.textContent = '서비스키와 요청 URL을 확인해 주세요.';
+    stopApiStatusEl.style.color = 'var(--red)';
+    return;
+  }
+  let matched = 0;
+  for (let i=0;i<ROUTE_FORWARD.length;i++){
+    const wp = ROUTE_FORWARD[i];
+    stopApiStatusEl.textContent = `정류장별 순차 검색 중... (${i+1}/${ROUTE_FORWARD.length}, 매칭 ${matched}건)`;
+    stopApiStatusEl.style.color = 'var(--dim)';
+    if (typeof wp.lat === 'number'){ matched++; continue; } // 이미 매칭된 지점은 건너뜀
+    try{
+      const q = cleanStopQuery(wp.name).slice(0,8);
+      const cands = await fetchStopCandidates(q, key, endpoint);
+      if (cands.length){ wp.lat = cands[0].lat; wp.lng = cands[0].lng; matched++; }
+    } catch(e){ /* 개별 검색 실패는 건너뛰고 계속 진행 */ }
+    await new Promise(r=>setTimeout(r, 250));
+  }
+  stopApiStatusEl.textContent = `자동매칭 완료: ${matched}/${ROUTE_FORWARD.length}건. 미매칭 지점은 아래에서 직접 검색해 주세요.`;
+  stopApiStatusEl.style.color = matched === ROUTE_FORWARD.length ? 'var(--green)' : 'var(--yellow)';
+  refreshWaypointsKeepState();
+  renderStopMatchList();
+});
+
+const stopMatchListEl = document.getElementById('stopMatchList');
+function renderStopMatchList(){
+  if (!stopMatchListEl) return;
+  stopMatchListEl.innerHTML = '';
+  ROUTE_FORWARD.forEach((wp,idx)=>{
+    const row = document.createElement('div');
+    row.className = 'matchrow';
+    if (typeof wp.lat === 'number'){
+      row.innerHTML = `<div class="lname">${wp.name}</div>
+        <div style="flex:1;color:var(--dim);font-size:10px;">${wp.lat.toFixed(5)}, ${wp.lng.toFixed(5)}</div>
+        <div class="ok">✓</div>`;
+    } else {
+      row.innerHTML = `<div class="lname">${wp.name}</div>
+        <input placeholder="정류장명 검색 후 Enter">
+        <div class="ok"></div>`;
+      const input = row.querySelector('input');
+      input.addEventListener('keydown', async (e)=>{
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const key = document.getElementById('apiKey').value.trim();
+        const endpoint = document.getElementById('stopApiEndpoint').value.trim();
+        const q = input.value.trim();
+        if (!q || !key || !endpoint) return;
+        input.disabled = true;
+        try{
+          const cands = await fetchStopCandidates(q, key, endpoint);
+          if (cands.length){
+            wp.lat = cands[0].lat; wp.lng = cands[0].lng;
+            refreshWaypointsKeepState();
+            renderStopMatchList();
+          } else {
+            row.querySelector('.ok').textContent = '✕';
+          }
+        } catch(err){ row.querySelector('.ok').textContent = '✕'; }
+        input.disabled = false;
+      });
+    }
+    stopMatchListEl.appendChild(row);
+  });
+}
+
+/* ===================== 지도(Leaflet) ===================== */
+let map = null, mapMarkersLayer = null, mapPolyline = null, mapPosMarker = null, mapPosCircle = null;
+function ensureMap(){
+  if (map || typeof L === 'undefined') return;
+  map = L.map('leafletMap', { zoomControl:true, attributionControl:true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap, © CARTO', maxZoom: 19, subdomains: 'abcd'
+  }).addTo(map);
+  mapMarkersLayer = L.layerGroup().addTo(map);
+  map.setView([37.4895, 126.4520], 12); // 영종~청라~석남동 일대 기본 중심
+}
+function renderMapRoute(){
+  if (typeof L === 'undefined' || !map) return;
+  mapMarkersLayer.clearLayers();
+  const coordWps = waypoints.filter(w=>typeof w.lat==='number');
+  if (!coordWps.length) return;
+  const latlngs = coordWps.map(w=>[w.lat,w.lng]);
+  if (mapPolyline) map.removeLayer(mapPolyline);
+  mapPolyline = L.polyline(latlngs, { color:'#3ad0ff', weight:4, opacity:0.75 }).addTo(map);
+  coordWps.forEach(w=>{
+    const isLight = w.type === 'light';
+    const isCurrent = w === waypoints[curIndex];
+    L.circleMarker([w.lat,w.lng], {
+      radius: isCurrent ? 8 : 5,
+      color: isLight ? '#ff3b3b' : '#2ee66b',
+      weight: isCurrent ? 3 : 1.5,
+      fillColor: isLight ? '#ff3b3b' : '#2ee66b',
+      fillOpacity: 0.9
+    }).bindTooltip(w.name, { direction:'top' }).addTo(mapMarkersLayer);
+  });
+  if (mapPanel && !mapPanel.classList.contains('hidden')){
+    map.fitBounds(mapPolyline.getBounds(), { padding:[24,24] });
+  }
+}
+function updateMapPosition(lat,lng,accuracy){
+  if (typeof L === 'undefined' || !map) return;
+  if (!mapPosMarker){
+    mapPosMarker = L.circleMarker([lat,lng], { radius:8, color:'#fff', weight:2, fillColor:'#3ad0ff', fillOpacity:1 }).addTo(map);
+    mapPosCircle = L.circle([lat,lng], { radius: accuracy||20, color:'#3ad0ff', weight:1, fillOpacity:0.08 }).addTo(map);
+  } else {
+    mapPosMarker.setLatLng([lat,lng]);
+    mapPosCircle.setLatLng([lat,lng]);
+    if (accuracy) mapPosCircle.setRadius(accuracy);
+  }
+  if (mapPanel && !mapPanel.classList.contains('hidden')) map.panTo([lat,lng], { animate:true });
+}
+const mapPanel = document.getElementById('mapPanel');
+document.getElementById('mapToggle').addEventListener('click', ()=>{
+  mapPanel.classList.remove('hidden');
+  ensureMap();
+  renderMapRoute();
+  setTimeout(()=>{ map.invalidateSize(); if (mapPolyline) map.fitBounds(mapPolyline.getBounds(),{padding:[24,24]}); }, 150);
+});
+document.getElementById('mapClose').addEventListener('click', ()=>{
+  mapPanel.classList.add('hidden');
+});
+
+/* ===================== PWA: 서비스워커 등록 =====================
+   file:// 로 열면 등록 자체가 안 되거나 무시됨 - http(s):// 로 호스팅된 상태에서만 의미가 있음.
+   등록 실패해도 앱 동작에는 영향 없음(그냥 오프라인 캐시/설치 배너 기능만 없어짐). */
+if ('serviceWorker' in navigator && (location.protocol === 'http:' || location.protocol === 'https:')){
+  navigator.serviceWorker.register('service-worker.js').catch(()=>{ /* 무시 */ });
+}
+
+/* ===================== 초기화 ===================== */
+resetRoute();
+renderCenter();
+renderCycles();
+setInterval(tick, 300);
+</script>
+</body>
+</html>
